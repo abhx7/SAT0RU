@@ -2,11 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>JJK: VIRAL VFX VISUALIZER</title>
+    <title>JJK: Cursed Technique</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Courier New', sans-serif; }
     
-        /* UI Optimized for Reels (Mobile 9:16) */
         #ui {
             position: absolute;
             top: 10%;
@@ -107,7 +106,6 @@
     const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
     composer.addPass(bloomPass);
 
-    // --- Particle Setup (Finer Size) ---
     const COUNT = 20000;
     const geometry = new THREE.BufferGeometry();
     const positions = new Float32Array(COUNT * 3);
@@ -122,11 +120,10 @@
     geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geometry.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
 
-    // Particle size reduced to 0.5 for that "dust" effect
     const particles = new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.3, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
     scene.add(particles);
 
-    // --- Technique Functions ---
+    // Technique Functions 
     function getRed(i) {
         if(i < COUNT * 0.1) {
             const r = Math.random() * 9;
@@ -171,7 +168,7 @@
         } else return { x: 0, y: 0, z: 0, r: 0, g: 0, b: 0, s: 0 };
     }
 
-    // --- State & Hand Tracking ---
+    // Hand Tracking
     let currentTech = 'neutral';
     let shakeIntensity = 0;
     const videoElement = document.querySelector('.input_video');
@@ -243,7 +240,7 @@
     });
     cameraUtils.start();
 
-    // --- Animation Loop ---
+    // Animation
     function animate() {
         requestAnimationFrame(animate);
         
