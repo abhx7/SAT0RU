@@ -231,6 +231,7 @@
     let rightCenter = {x:0.5,y:0.5};
     let leftOffsetX = 0;
     let rightOffsetX = 0;
+    let pinchDepth = 0; // z-value when purple pinch detected
     let shakeIntensity = 0;
     const videoElement = document.querySelector('.input_video');
     const canvasElement = document.getElementById('output_canvas');
@@ -307,6 +308,11 @@
                     rhTech = detected;
                     rightCenter = {x: cx, y: cy};
                 }
+
+                // record depth if purple pinch occurs
+                if (purplePinch) {
+                    pinchDepth = (lm[8].z + lm[4].z) / 2;
+                }
             });
         }
 
@@ -320,15 +326,16 @@
             lastHandDistance = Math.hypot(dx, dy);
         }
 
-        updateHands(lhTech, rhTech, leftCenter, rightCenter);
+        updateHands(lhTech, rhTech, leftCenter, rightCenter, pinchDepth);
     });
 
-    function updateHands(lTech, rTech, lCenter, rCenter) {
+    function updateHands(lTech, rTech, lCenter, rCenter, pDepth) {
         // store handed tech values and calculate offsets based on screen position
         leftTech = lTech;
         rightTech = rTech;
         leftCenter = lCenter || leftCenter;
         rightCenter = rCenter || rightCenter;
+        if (pDepth !== undefined) pinchDepth = pDepth;
         // compute offsets for particles (map normalized x to scene units)
         leftOffsetX = (leftCenter.x - 0.5) * 100;
         rightOffsetX = (rightCenter.x - 0.5) * 100;
@@ -346,7 +353,12 @@
         if (leftTech === 'shrine' && rightTech === 'shrine') {
             showTech = 'shrine';
         } else if (leftTech === 'purple' || rightTech === 'purple') {
-            showTech = 'purple';
+            // check for poke-forward pinch depth to trigger fullscreen explosion
+            if (pinchDepth < -0.15) {
+                showTech = 'purpleFull';
+            } else {
+                showTech = 'purple';
+            }
         } else if ((leftTech === 'void' && rightTech === 'neutral') || (rightTech === 'void' && leftTech === 'neutral')) {
             // single-hand void gets priority and remains centered
             showTech = 'void';
@@ -375,12 +387,20 @@
                 bloomPass.strength = 4.0;
                 voidSphere.visible = false;
                 break;
+            case 'purpleFull':
+                glowColor = '#ff00ff';
+                nameEl.innerText = "HOLLOW PURPLE: FULL";
+                bloomPass.strength = 6.0;
+                shakeIntensity = 1.0;
+                voidSphere.visible = false;
+                break;
             case 'void':
                 glowColor = '#00ffff';
                 nameEl.innerText = "Domain Expansion: Infinite Void";
                 bloomPass.strength = 2.0;
                 voidSphere.visible = true;
                 break;
+            
             case 'red':
                 glowColor = '#ff3333';
                 nameEl.innerText = "Reverse Cursed Technique: Red";
@@ -406,12 +426,15 @@
                 shakeIntensity = 0.6;
                 break;
             default:
+                voidSphere.visible = false;
                 glowColor = '#00ffff';
                 nameEl.innerText = "Neutral State";
                 bloomPass.strength = 1.0;
         }
 
         currentTech = showTech;
+        // reset pinchDepth after using explosion
+        if (showTech !== 'purpleFull') pinchDepth = 0;
 
         // recompute particle targets based on decided mode
         for (let i = 0; i < COUNT; i++) {
@@ -531,6 +554,14 @@
                 pos[i + 1] *= 0.998;
                 pos[i + 2] *= 0.998;
             }
+        } else if (currentTech === 'purpleFull') {
+            // expand particles outward rapidly
+            for (let i = 0; i < COUNT * 3; i += 3) {
+                pos[i] *= 1.1;
+                pos[i+1] *= 1.1;
+                pos[i+2] *= 1.1;
+            }
+            particles.rotation.z += 0.5;
         } else if (currentTech === 'purple') {
             particles.rotation.z += 0.2;
             particles.rotation.y += 0.05;
