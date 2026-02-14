@@ -123,6 +123,15 @@
     const particles = new THREE.Points(geometry, new THREE.PointsMaterial({ size: 0.3, vertexColors: true, blending: THREE.AdditiveBlending, transparent: true, depthWrite: false }));
     scene.add(particles);
 
+    // black hole core for void effect (larger radius)
+    const voidCoreRadius = 8;
+    const voidSphere = new THREE.Mesh(
+        new THREE.SphereGeometry(voidCoreRadius, 32, 32),
+        new THREE.MeshBasicMaterial({ color: 0x000000 })
+    );
+    voidSphere.visible = false;
+    scene.add(voidSphere);
+
     // Technique Functions 
     function getRed(i) {
         if(i < COUNT * 0.1) {
@@ -174,10 +183,18 @@
 
 
     function getVoid(i) {
-        if (i < COUNT * 0.15) {
+        // central swirling ring for first portion (ensure particles remain outside core)
+        if (i < COUNT * 0.2) {
             const angle = Math.random() * Math.PI * 2;
-            return { x: 26 * Math.cos(angle), y: 26 * Math.sin(angle), z: (Math.random()-0.5) * 1, r: 1, g: 1, b: 1, s: 2.5 };
+            const r = voidCoreRadius + 6 + Math.random() * 4; // start further away
+            return { x: r * Math.cos(angle), y: r * Math.sin(angle), z: (Math.random() - 0.5) * 2, r: 1, g: 1, b: 1, s: 2.5 };
+        } else if (i < COUNT * 0.35) {
+            // inner accretion disk
+            const angle = Math.random() * Math.PI * 2;
+            const r = voidCoreRadius + 12 + Math.random() * 6;
+            return { x: r * Math.cos(angle), y: r * Math.sin(angle), z: (Math.random() - 0.5) * 4, r: 0.5, g: 0.5, b: 0.8, s: 2.0 };
         } else {
+            // outer particles drawn from random sphere
             const radius = 30 + Math.random() * 90;
             const theta = Math.random() * Math.PI * 2;
             const phi = Math.acos(2 * Math.random() - 1);
@@ -205,7 +222,15 @@
     }
 
     // Hand Tracking
+    // track each hand separately
     let currentTech = 'neutral';
+    let leftTech = 'neutral';
+    let rightTech = 'neutral';
+    let lastHandDistance = Infinity;
+    let leftCenter = {x:0.5,y:0.5};
+    let rightCenter = {x:0.5,y:0.5};
+    let leftOffsetX = 0;
+    let rightOffsetX = 0;
     let shakeIntensity = 0;
     const videoElement = document.querySelector('.input_video');
     const canvasElement = document.getElementById('output_canvas');
@@ -217,10 +242,17 @@
 
     hands.onResults((results) => {
         canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-        let detected = 'neutral';
+        let lhTech = 'neutral';
+        let rhTech = 'neutral';
 
         if (results.multiHandLandmarks) {
-            results.multiHandLandmarks.forEach((lm) => {
+            results.multiHandLandmarks.forEach((lm, idx) => {
+                // update approximate center of each hand (average of all landmarks)
+                let sumx = 0, sumy = 0;
+                lm.forEach(pt => { sumx += pt.x; sumy += pt.y; });
+                const cx = sumx / lm.length;
+                const cy = sumy / lm.length;
+
                 drawConnectors(canvasCtx, lm, HAND_CONNECTIONS, {color: glowColor, lineWidth: 5});
                 drawLandmarks(canvasCtx, lm, {color: '#fff', lineWidth: 1, radius: 2});
 
@@ -233,82 +265,214 @@
                     lm[8].y - lm[4].y
                 );
 
-                // --- FIST (Blue) ---
-                // All fingers curled
                 const fist =
                     isCurled(8,6) &&
                     isCurled(12,10) &&
                     isCurled(16,14) &&
                     isCurled(20,18);
 
-                // --- PURPLE PINCH ---
-                // Thumb + Index close
-                // Other fingers clearly extended
                 const purplePinch =
                     pinchDistance < 0.04 &&
-                    isUp(12,10) &&   // middle up
-                    isUp(16,14) &&   // ring up
-                    isUp(20,18);     // pinky up
+                    isUp(12,10) &&
+                    isUp(16,14) &&
+                    isUp(20,18);
 
-                // --- SHRINE ---
                 const shrine =
                     isUp(8,6) &&
                     isUp(12,10) &&
                     isUp(16,14) &&
                     isUp(20,18);
 
-                // --- VOID ---
                 const voidSign =
                     isUp(8,6) &&
                     isUp(12,10) &&
                     !isUp(16,14);
 
-                // --- RED ---
                 const redSign =
                     isUp(8,6) &&
                     !isUp(12,10);
 
-                // PRIORITY ORDER (important)
+                let detected = 'neutral';
                 if (purplePinch) detected = 'purple';
                 else if (fist) detected = 'blue';
                 else if (shrine) detected = 'shrine';
                 else if (voidSign) detected = 'void';
                 else if (redSign) detected = 'red';
 
+                const handLabel = results.multiHandedness[idx].label;
+                if (handLabel === 'Left') {
+                    lhTech = detected;
+                    leftCenter = {x: cx, y: cy};
+                } else {
+                    rhTech = detected;
+                    rightCenter = {x: cx, y: cy};
+                }
             });
         }
-        updateState(detected);
+
+        // compute inter-hand distance using wrists if two hands present
+        lastHandDistance = Infinity;
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length === 2) {
+            const l0 = results.multiHandLandmarks[0][0];
+            const l1 = results.multiHandLandmarks[1][0];
+            const dx = l0.x - l1.x;
+            const dy = l0.y - l1.y;
+            lastHandDistance = Math.hypot(dx, dy);
+        }
+
+        updateHands(lhTech, rhTech, leftCenter, rightCenter);
     });
 
-    function updateState(tech) {
-        if(currentTech === tech) return;
-        currentTech = tech;
+    function updateHands(lTech, rTech, lCenter, rCenter) {
+        // store handed tech values and calculate offsets based on screen position
+        leftTech = lTech;
+        rightTech = rTech;
+        leftCenter = lCenter || leftCenter;
+        rightCenter = rCenter || rightCenter;
+        // compute offsets for particles (map normalized x to scene units)
+        leftOffsetX = (leftCenter.x - 0.5) * 100;
+        rightOffsetX = (rightCenter.x - 0.5) * 100;
+        updateState();
+    }
+
+    function updateState() {
         const nameEl = document.getElementById('technique-name');
-        shakeIntensity = tech !== 'neutral' ? 0.4 : 0;
+        shakeIntensity = 0;
+        let showTech = 'neutral';
+        let merged = false;
 
-        if(tech === 'shrine') { glowColor = '#ff0000'; nameEl.innerText = "Domain Expansion: Malevolent Shrine"; bloomPass.strength = 2.5; }
-        else if(tech === 'purple') { glowColor = '#bb00ff'; nameEl.innerText = "Secret Technique: Hollow Purple"; bloomPass.strength = 4.0; }
-        else if(tech === 'void') { glowColor = '#00ffff'; nameEl.innerText = "Domain Expansion: Infinite Void"; bloomPass.strength = 2.0; }
-        else if(tech === 'red') { glowColor = '#ff3333'; nameEl.innerText = "Reverse Cursed Technique: Red"; bloomPass.strength = 2.5; }
-        else if(tech === 'blue') { glowColor = '#0099ff'; nameEl.innerText = "Cursed Technique Lapse: Blue"; bloomPass.strength = 3.0; shakeIntensity = 0.6;}
-        else { glowColor = '#00ffff'; nameEl.innerText = "Neutral State"; bloomPass.strength = 1.0; }
+        // decide what to display based on both hands
+        // shrine now requires both hands and stays centered
+        if (leftTech === 'shrine' && rightTech === 'shrine') {
+            showTech = 'shrine';
+        } else if (leftTech === 'purple' || rightTech === 'purple') {
+            showTech = 'purple';
+        } else if ((leftTech === 'void' && rightTech === 'neutral') || (rightTech === 'void' && leftTech === 'neutral')) {
+            // single-hand void gets priority and remains centered
+            showTech = 'void';
+        } else if (leftTech === 'red' && rightTech === 'blue' && lastHandDistance < 0.15) {
+            showTech = 'merged';
+            merged = true;
+        } else if (leftTech !== 'neutral' && rightTech !== 'neutral') {
+            showTech = 'both';
+        } else if (leftTech !== 'neutral') {
+            showTech = leftTech;
+        } else if (rightTech !== 'neutral') {
+            showTech = rightTech;
+        }
 
-        for(let i=0; i<COUNT; i++) {
+        // update UI & bloom/glow
+        switch (showTech) {
+            case 'shrine':
+                glowColor = '#ff0000';
+                nameEl.innerText = "Domain Expansion: Malevolent Shrine";
+                bloomPass.strength = 2.5;
+                voidSphere.visible = false;
+                break;
+            case 'purple':
+                glowColor = '#bb00ff';
+                nameEl.innerText = "Secret Technique: Hollow Purple";
+                bloomPass.strength = 4.0;
+                voidSphere.visible = false;
+                break;
+            case 'void':
+                glowColor = '#00ffff';
+                nameEl.innerText = "Domain Expansion: Infinite Void";
+                bloomPass.strength = 2.0;
+                voidSphere.visible = true;
+                break;
+            case 'red':
+                glowColor = '#ff3333';
+                nameEl.innerText = "Reverse Cursed Technique: Red";
+                bloomPass.strength = 2.5;
+                shakeIntensity = 0.4;
+                break;
+            case 'blue':
+                glowColor = '#0099ff';
+                nameEl.innerText = "Cursed Technique Lapse: Blue";
+                bloomPass.strength = 3.0;
+                shakeIntensity = 0.6;
+                break;
+            case 'both':
+                glowColor = '#ffffff';
+                nameEl.innerText = "Red & Blue";
+                bloomPass.strength = 3.0;
+                shakeIntensity = 0.5;
+                break;
+            case 'merged':
+                glowColor = '#aa00ff';
+                nameEl.innerText = "Red-Blue Convergence";
+                bloomPass.strength = 4.5;
+                shakeIntensity = 0.6;
+                break;
+            default:
+                glowColor = '#00ffff';
+                nameEl.innerText = "Neutral State";
+                bloomPass.strength = 1.0;
+        }
+
+        currentTech = showTech;
+
+        // recompute particle targets based on decided mode
+        for (let i = 0; i < COUNT; i++) {
             let p;
-            if(tech === 'neutral') {
-                if(i < COUNT * 0.05) {
-                    const r = 15 + Math.random()*20; const t = Math.random()*6.28; const ph = Math.random()*3.14;
-                    p = { x: r*Math.sin(ph)*Math.cos(t), y: r*Math.sin(ph)*Math.sin(t), z: r*Math.cos(ph), r: 0.1, g: 0.1, b: 0.2, s: 0.4 };
-                } else p = { x:0, y:0, z:0, r:0, g:0, b:0, s:0 };
+            let offsetX = 0;
+            if (showTech === 'neutral') {
+                if (i < COUNT * 0.05) {
+                    const r = 15 + Math.random() * 20;
+                    const t = Math.random() * 6.28;
+                    const ph = Math.random() * 3.14;
+                    p = { x: r * Math.sin(ph) * Math.cos(t), y: r * Math.sin(ph) * Math.sin(t), z: r * Math.cos(ph), r: 0.1, g: 0.1, b: 0.2, s: 0.4 };
+                } else {
+                    p = { x: 0, y: 0, z: 0, r: 0, g: 0, b: 0, s: 0 };
+                }
+            } else if (showTech === 'red') {
+                p = getRed(i);
+                // which hand produced the red?
+                offsetX = (leftTech === 'red' ? leftOffsetX : rightOffsetX);
+            } else if (showTech === 'blue') {
+                p = getBlue(i);
+                offsetX = (leftTech === 'blue' ? leftOffsetX : rightOffsetX);
+            } else if (showTech === 'void') {
+                p = getVoid(i);
+                offsetX = 0; // ensure always centered
+                // if particle is inside core radius, make it invisible/black
+                const dist = Math.sqrt(p.x*p.x + p.y*p.y + p.z*p.z);
+                if (dist < voidCoreRadius + 2) {
+                    // completely hide any particle too close to surface
+                    p.r = 0; p.g = 0; p.b = 0; p.s = 0.0;
+                }
+            } else if (showTech === 'purple') {
+                p = getPurple(i);
+            } else if (showTech === 'shrine') {
+                p = getShrine(i);
+            } else if (showTech === 'both') {
+                if (i < COUNT * 0.5) {
+                    p = leftTech === 'red' ? getRed(i) : getBlue(i);
+                    offsetX = leftOffsetX;
+                } else {
+                    p = rightTech === 'blue' ? getBlue(i) : getRed(i);
+                    offsetX = rightOffsetX;
+                }
+                // gradually pull offsets closer as hands approach using a safe interpolation
+                const threshold = 0.15;
+                let t = 0;
+                if (lastHandDistance < threshold) {
+                    t = 1 - (lastHandDistance / threshold);
+                }
+                const mid = (leftOffsetX + rightOffsetX) / 2;
+                offsetX = offsetX * (1 - t) + mid * t;
+            } else if (showTech === 'merged') {
+                p = getPurple(i);
+                offsetX = (leftOffsetX + rightOffsetX) / 2;
             }
-            else if(tech === 'red') p = getRed(i);
-            else if(tech === 'blue') p = getBlue(i);
-            else if(tech === 'void') p = getVoid(i);
-            else if(tech === 'purple') p = getPurple(i);
-            else if(tech === 'shrine') p = getShrine(i);
-            
-            targetPositions[i*3] = p.x; targetPositions[i*3+1] = p.y; targetPositions[i*3+2] = p.z;
-            targetColors[i*3] = p.r; targetColors[i*3+1] = p.g; targetColors[i*3+2] = p.b;
+
+            targetPositions[i * 3] = p.x + offsetX;
+            targetPositions[i * 3 + 1] = p.y;
+            targetPositions[i * 3 + 2] = p.z;
+            targetColors[i * 3] = p.r;
+            targetColors[i * 3 + 1] = p.g;
+            targetColors[i * 3 + 2] = p.b;
             targetSizes[i] = p.s;
         }
     }
@@ -346,23 +510,40 @@
         particles.geometry.attributes.color.needsUpdate = true;
         particles.geometry.attributes.size.needsUpdate = true;
         
-        // UPDATED ROTATION LOGIC: Locking rotation for Shrine
-        if(currentTech === 'red') {
-            particles.rotation.z -= 0.1;}
-        else if (currentTech === 'blue') {
+        // UPDATED ROTATION LOGIC: Locking rotation for Shrine and handling combined states
+        if (currentTech === 'red') {
+            particles.rotation.z -= 0.1;
+        } else if (currentTech === 'blue') {
             particles.rotation.z -= 0.15;
             particles.rotation.y += 0.02;
-            for(let i = 0; i < COUNT * 3; i += 3) {
+            for (let i = 0; i < COUNT * 3; i += 3) {
                 pos[i] *= 0.995;
                 pos[i+1] *= 0.995;
                 pos[i+2] *= 0.995;
             }
+        } else if (currentTech === 'void') {
+            // create swirling around central sphere
+            particles.rotation.z += 0.3;
+            particles.rotation.y += 0.02;
+            // optionally pull particles inward slowly for accretion
+            for (let i = 0; i < COUNT * 3; i += 3) {
+                pos[i] *= 0.998;
+                pos[i + 1] *= 0.998;
+                pos[i + 2] *= 0.998;
+            }
         } else if (currentTech === 'purple') {
-            particles.rotation.z += 0.2; 
+            particles.rotation.z += 0.2;
+            particles.rotation.y += 0.05;
+        } else if (currentTech === 'both') {
+            // half red/blue swirling – gentle spin
+            particles.rotation.y += 0.02;
+        } else if (currentTech === 'merged') {
+            // converged state uses fast purple-style motion
+            particles.rotation.z += 0.2;
             particles.rotation.y += 0.05;
         } else if (currentTech === 'shrine') {
             // FORCE UPRIGHT: Reset and freeze all rotations
-            particles.rotation.set(0, 0, 0); 
+            particles.rotation.set(0, 0, 0);
         } else {
             // Default Neutral rotation
             particles.rotation.y += 0.005;
