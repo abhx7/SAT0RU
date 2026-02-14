@@ -1,15 +1,20 @@
 ## Description
 SAT0RU is a cursed technique visualizer based on the popular anime series, Jujutsu Kaisen 呪術廻戦. It combines the mediapipe library with three.js to recreate cursed techniques from Jujutsu Kaisen. Powered by Gemini 3.
 
+This project has been further extended with the addition of **Cursed Technique Lapse: Blue** and refined gesture logic using GPT-assisted development.
+
 ![Demo GIF](https://github.com/user-attachments/assets/8ad2b871-02c0-4b97-95f3-34682e745be0)
 
 ## Features
 
 This project utilizes particles to render volume-based cursed techniques:
 
+* **Cursed Technique Lapse: Blue**
+    * **Visuals:** A gravitational singularity that compresses space inward with spiraling attraction.
+    * **Trigger:** Closed fist (all fingers curled).
 * **Secret Technique: Hollow Purple**
     * **Visuals:** A chaotic singularity combining attraction and repulsion.
-    * **Trigger:** "Pinch" gesture (Thumb + Index touching).
+    * **Trigger:** "Pinch" gesture (Thumb + Index touching, remaining fingers extended).
 * **Domain Expansion: Infinite Void**
     * **Visuals:** A multi-layered celestial domain featuring a bright event horizon ring, a vertical stream of infinite information, and a deep cosmos background.
     * **Trigger:** "Cross" gesture (Index + Middle fingers crossed).
@@ -28,7 +33,7 @@ You need a modern web browser (Chrome, Edge, Firefox) and a webcam.
 ### Installation
 1.  **Clone the repo**
     ```bash
-    git clone [https://github.com/reinesana/SAT0RU.git](https://github.com/reinesana/SAT0RU.git)
+    git clone [https://github.com/abhx7/SAT0RU.git](https://github.com/abhx7/SAT0RU.git)
     cd SAT0RU
     ```
 
@@ -37,4 +42,4 @@ You need a modern web browser (Chrome, Edge, Firefox) and a webcam.
 
 ## Note 
 
-This project was built and powered by **Google Gemini 3**.
+This project was originally built and powered by **Google Gemini 3**, with additional feature development and gesture enhancements implemented using GPT-assisted development.
