@@ -137,6 +137,42 @@
         }
     }
 
+    function getBlue(i) {
+        // Dense gravitational core
+        if (i < COUNT * 0.15) {
+            const r = Math.random() * 6;
+            const theta = Math.random() * Math.PI * 2;
+            const phi = Math.acos(2 * Math.random() - 1);
+
+            return {
+                x: r * Math.sin(phi) * Math.cos(theta),
+                y: r * Math.sin(phi) * Math.sin(theta),
+                z: r * Math.cos(phi),
+                r: 0.1,
+                g: 0.5,
+                b: 3.0,
+                s: 2.5
+            };
+        } 
+        // Spiral vortex arms (inward pull effect)
+        else {
+            const t = i / COUNT;
+            const angle = t * 25;
+            const radius = 40 * (1 - t); // collapsing inward
+
+            return {
+                x: radius * Math.cos(angle),
+                y: radius * Math.sin(angle),
+                z: (Math.random() - 0.5) * 5,
+                r: 0.0,
+                g: 0.3,
+                b: 1.0,
+                s: 1.2
+                        };
+                    }
+                }
+
+
     function getVoid(i) {
         if (i < COUNT * 0.15) {
             const angle = Math.random() * Math.PI * 2;
@@ -189,12 +225,56 @@
                 drawLandmarks(canvasCtx, lm, {color: '#fff', lineWidth: 1, radius: 2});
 
                 const isUp = (t, p) => lm[t].y < lm[p].y;
-                const pinch = Math.hypot(lm[8].x - lm[4].x, lm[8].y - lm[4].y);
-                
-                if (pinch < 0.04) detected = 'purple';
-                else if (isUp(8,6) && isUp(12,10) && isUp(16,14) && isUp(20,18)) detected = 'shrine';
-                else if (isUp(8,6) && isUp(12,10) && !isUp(16,14)) detected = 'void';
-                else if (isUp(8,6) && !isUp(12,10)) detected = 'red';
+                const isCurled = (t, p) => lm[t].y > lm[p].y;
+
+                // Distance thumb-index
+                const pinchDistance = Math.hypot(
+                    lm[8].x - lm[4].x,
+                    lm[8].y - lm[4].y
+                );
+
+                // --- FIST (Blue) ---
+                // All fingers curled
+                const fist =
+                    isCurled(8,6) &&
+                    isCurled(12,10) &&
+                    isCurled(16,14) &&
+                    isCurled(20,18);
+
+                // --- PURPLE PINCH ---
+                // Thumb + Index close
+                // Other fingers clearly extended
+                const purplePinch =
+                    pinchDistance < 0.04 &&
+                    isUp(12,10) &&   // middle up
+                    isUp(16,14) &&   // ring up
+                    isUp(20,18);     // pinky up
+
+                // --- SHRINE ---
+                const shrine =
+                    isUp(8,6) &&
+                    isUp(12,10) &&
+                    isUp(16,14) &&
+                    isUp(20,18);
+
+                // --- VOID ---
+                const voidSign =
+                    isUp(8,6) &&
+                    isUp(12,10) &&
+                    !isUp(16,14);
+
+                // --- RED ---
+                const redSign =
+                    isUp(8,6) &&
+                    !isUp(12,10);
+
+                // PRIORITY ORDER (important)
+                if (purplePinch) detected = 'purple';
+                else if (fist) detected = 'blue';
+                else if (shrine) detected = 'shrine';
+                else if (voidSign) detected = 'void';
+                else if (redSign) detected = 'red';
+
             });
         }
         updateState(detected);
@@ -210,6 +290,7 @@
         else if(tech === 'purple') { glowColor = '#bb00ff'; nameEl.innerText = "Secret Technique: Hollow Purple"; bloomPass.strength = 4.0; }
         else if(tech === 'void') { glowColor = '#00ffff'; nameEl.innerText = "Domain Expansion: Infinite Void"; bloomPass.strength = 2.0; }
         else if(tech === 'red') { glowColor = '#ff3333'; nameEl.innerText = "Reverse Cursed Technique: Red"; bloomPass.strength = 2.5; }
+        else if(tech === 'blue') { glowColor = '#0099ff'; nameEl.innerText = "Cursed Technique Lapse: Blue"; bloomPass.strength = 3.0; shakeIntensity = 0.6;}
         else { glowColor = '#00ffff'; nameEl.innerText = "Neutral State"; bloomPass.strength = 1.0; }
 
         for(let i=0; i<COUNT; i++) {
@@ -221,6 +302,7 @@
                 } else p = { x:0, y:0, z:0, r:0, g:0, b:0, s:0 };
             }
             else if(tech === 'red') p = getRed(i);
+            else if(tech === 'blue') p = getBlue(i);
             else if(tech === 'void') p = getVoid(i);
             else if(tech === 'purple') p = getPurple(i);
             else if(tech === 'shrine') p = getShrine(i);
@@ -266,7 +348,15 @@
         
         // UPDATED ROTATION LOGIC: Locking rotation for Shrine
         if(currentTech === 'red') {
-            particles.rotation.z -= 0.1;
+            particles.rotation.z -= 0.1;}
+        else if (currentTech === 'blue') {
+            particles.rotation.z -= 0.15;
+            particles.rotation.y += 0.02;
+            for(let i = 0; i < COUNT * 3; i += 3) {
+                pos[i] *= 0.995;
+                pos[i+1] *= 0.995;
+                pos[i+2] *= 0.995;
+            }
         } else if (currentTech === 'purple') {
             particles.rotation.z += 0.2; 
             particles.rotation.y += 0.05;
