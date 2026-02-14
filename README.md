@@ -25,6 +25,39 @@ This project utilizes particles to render volume-based cursed techniques:
     * **Visuals:** A dark, ominous aura representing the King of Curses.
     * **Trigger:** Flat hand / Prayer gesture.
 
+
+## Advanced Features
+
+### Dual-Hand Tracking
+- Each hand is tracked independently.
+- Techniques render on the corresponding side of the screen.
+- Particle systems dynamically offset based on real hand position.
+
+### Red–Blue Convergence System
+- When Red and Blue are active simultaneously, both particle systems render independently.
+- As hands move closer together, particle offsets interpolate toward a midpoint.
+- When distance falls below a threshold, techniques merge into Hollow Purple.
+
+### Spatial Interaction
+- Particle origin follows real-time hand movement.
+- Effects respond dynamically to hand proximity.
+- Smooth interpolation prevents snapping or flickering.
+
+### Dynamic State Blending
+- Separate states for:
+  - Single-hand activation
+  - Dual activation
+  - Convergence state
+  - Full merged state
+- Visual transitions are continuous rather than instant swaps.
+
+### Postprocessing Effects
+- Adaptive bloom intensity based on technique.
+- Camera shake for high-energy states.
+- Rotation logic varies per technique.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
